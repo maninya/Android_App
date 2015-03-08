@@ -1,6 +1,7 @@
 package maninya.myfirst;
 
-import android.support.v7.app.ActionBarActivity;
+import java.io.IOException;
+import java.util.List;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -15,6 +16,10 @@ import android.util.Log;
 import android.widget.TextView;
 import android.support.v4.app.FragmentActivity;
 import android.content.IntentSender;
+import android.location.Geocoder;
+import android.location.Address;
+import android.os.AsyncTask;
+import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -37,11 +42,13 @@ public class MyActivity extends FragmentActivity implements
         GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, LocationListener {
     public final static String TAG = "maninya.myfirst.MESSAGE";
     private final static int CONNECTION_FAILURE_RESOLUTION_REQUEST = 9000;
+
     private GoogleMap mMap;
 
     private GoogleApiClient mGoogleApiClient;
 
     private LocationRequest mLocationRequest;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,6 +68,13 @@ public class MyActivity extends FragmentActivity implements
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
                 .setInterval(10 * 1000)        // 10 seconds, in milliseconds
                 .setFastestInterval(1 * 1000); // 1 second, in milliseconds
+
+        // Getting user input location
+        String searchStr = "toilets in bangalore";
+
+        if(searchStr!=null && !searchStr.equals("")){
+            new GeocoderTask().execute(searchStr);
+        }
 
     }
 
@@ -89,21 +103,27 @@ public class MyActivity extends FragmentActivity implements
                 .position(latLng)
                 .title("You are here!");
         mMap.addMarker(options);
-        mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
+
+        mMap.addMarker(new MarkerOptions().position(latLng)).setVisible(true);
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 10));
+        // Zoom in, animating the camera.
+        mMap.animateCamera(CameraUpdateFactory.zoomTo(9), 2000, null);
+
     }
 
     @Override
     public void onConnected(Bundle bundle) {
+
         Location location = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+
         if (location == null) {
             LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
         }
         else {
             handleNewLocation(location);
         }
-
-
         LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
+
     }
 
     @Override
@@ -170,6 +190,59 @@ public class MyActivity extends FragmentActivity implements
         return super.onCreateOptionsMenu(menu);
     }
 
+    // An AsyncTask class for accessing the GeoCoding Web Service
+    private class GeocoderTask extends AsyncTask<String, Void, List<Address>> {
+
+        @Override
+        protected List<Address> doInBackground(String... locationName) {
+            // Creating an instance of Geocoder class
+            Geocoder geocoder = new Geocoder(getBaseContext());
+            List<Address> addresses = null;
+
+            try {
+                // Getting a maximum of 3 Address that matches the input text
+                addresses = geocoder.getFromLocationName(locationName[0], 20);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return addresses;
+        }
+
+        @Override
+        protected void onPostExecute(List<Address> addresses) {
+
+            if (addresses == null || addresses.size() == 0) {
+                Toast.makeText(getBaseContext(), "No Location found", Toast.LENGTH_SHORT).show();
+            }
+
+            // Clears all the existing markers on the map
+            mMap.clear();
+
+            // Adding Markers on Google Map for each matching address
+            for (int i = 0; i < addresses.size(); i++) {
+
+                Address address = (Address) addresses.get(i);
+
+                // Creating an instance of GeoPoint, to display in Google Map
+                LatLng latLng = new LatLng(address.getLatitude(), address.getLongitude());
+
+                String addressText = String.format("%s, %s",
+                        address.getMaxAddressLineIndex() > 0 ? address.getAddressLine(0) : "",
+                        address.getCountryName());
+
+                MarkerOptions newOptions = new MarkerOptions();
+                newOptions.position(latLng);
+                newOptions.title(addressText);
+
+                mMap.addMarker(newOptions);
+
+                // Locate the first location
+                if (i == 0)
+                    mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng));
+            }
+        }
+
+    }
     public void openSearch() {
         //Do something here.
     }
@@ -193,14 +266,6 @@ public class MyActivity extends FragmentActivity implements
             default:
                 return super.onOptionsItemSelected(item);
         }
-    }
 
-//    /** Called when the user clicks the Send button */
-//    public void sendMessage(View view) {
-//        Intent intent = new Intent(this, DisplayMessageActivity.class);
-//        EditText editText = (EditText) findViewById(R.id.edit_message);
-//        String message = editText.getText().toString();
-//        intent.putExtra(EXTRA_MESSAGE, message);
-//        startActivity(intent);
-//    }
+    }
 }
